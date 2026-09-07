@@ -71,9 +71,6 @@ export default function Lamp({
   const baseRing =
     useRef<THREE.Mesh>(null);
 
-  const glowLight =
-    useRef<THREE.PointLight>(null);
-
   const { camera } = useThree();
 
   const drag = useRef({
@@ -169,9 +166,9 @@ export default function Lamp({
 
     const p = progress.get();
 
-    /*
-     * SCROLL ROTATION
-     */
+    /* -----------------------------
+       SCROLL ROTATION
+    ----------------------------- */
 
     let scrollRotation = 0;
 
@@ -247,9 +244,9 @@ export default function Lamp({
       );
     }
 
-    /*
-     * MANUAL ROTATION
-     */
+    /* -----------------------------
+       MANUAL ROTATION
+    ----------------------------- */
 
     const manualRotation =
       drag.current.rotation;
@@ -275,9 +272,9 @@ export default function Lamp({
         delta
       );
 
-    /*
-     * CAMERA
-     */
+    /* -----------------------------
+       CINEMATIC CAMERA
+    ----------------------------- */
 
     let targetX = 0;
     let targetY = 0.72;
@@ -355,9 +352,9 @@ export default function Lamp({
       0
     );
 
-    /*
-     * EXPLODED VIEW
-     */
+    /* -----------------------------
+       EXPLODED VIEW
+    ----------------------------- */
 
     const breakIn = smooth(
       range(p, 0.415, 0.5)
@@ -500,15 +497,14 @@ export default function Lamp({
         );
     }
 
-    /*
-     * LIGHT ATMOSPHERE
-     */
-
-    let intensity = 0.82;
+    /* -----------------------------
+       LIGHT COLOR
+       No animated PointLight.
+       Only emissive material changes.
+    ----------------------------- */
 
     if (p < 0.27) {
       targetColor.copy(warmColor);
-      intensity = 0.82;
     }
 
     if (p >= 0.27 && p < 0.38) {
@@ -520,12 +516,6 @@ export default function Lamp({
         warmColor,
         neutralColor,
         t
-      );
-
-      intensity = lerp(
-        t,
-        0.82,
-        0.64
       );
     }
 
@@ -539,17 +529,10 @@ export default function Lamp({
         coolColor,
         t
       );
-
-      intensity = lerp(
-        t,
-        0.64,
-        0.4
-      );
     }
 
     if (p >= 0.45 && p < 0.59) {
       targetColor.copy(coolColor);
-      intensity = 0.4;
     }
 
     if (p >= 0.59 && p < 0.75) {
@@ -562,37 +545,24 @@ export default function Lamp({
         warmColor,
         t
       );
-
-      intensity = lerp(
-        t,
-        0.4,
-        0.82
-      );
     }
 
     if (p >= 0.75) {
       targetColor.copy(finalWarmColor);
-      intensity = 0.84;
-    }
-
-    if (glowLight.current) {
-      glowLight.current.color.lerp(
-        targetColor,
-        1 - Math.exp(-4 * delta)
-      );
-
-      glowLight.current.intensity =
-        THREE.MathUtils.damp(
-          glowLight.current.intensity,
-          intensity,
-          4,
-          delta
-        );
     }
 
     /*
-     * FLOATING
-     */
+      Change the emissive colour directly.
+      No point light = much more stable on mobile.
+    */
+
+    lightMaterial.emissive.copy(
+      targetColor
+    );
+
+    /* -----------------------------
+       FLOATING MOTION
+    ----------------------------- */
 
     const time =
       performance.now();
@@ -610,6 +580,10 @@ export default function Lamp({
         delta
       );
   });
+
+  /* -----------------------------
+     DRAG ROTATION
+  ----------------------------- */
 
   const handlePointerDown = (
     event: any
@@ -651,6 +625,8 @@ export default function Lamp({
       onPointerUp={handlePointerUp}
       onPointerOut={handlePointerUp}
     >
+      {/* LEFT SHELL */}
+
       <mesh
         ref={shellLeft}
         position={[-0.31, 1.3, 0]}
@@ -661,6 +637,8 @@ export default function Lamp({
           args={[0.62, 3.5, 0.72]}
         />
       </mesh>
+
+      {/* RIGHT SHELL */}
 
       <mesh
         ref={shellRight}
@@ -673,6 +651,8 @@ export default function Lamp({
         />
       </mesh>
 
+      {/* INNER DARK FRAME */}
+
       <mesh
         position={[0, 1.3, 0.355]}
         material={innerDarkMaterial}
@@ -681,6 +661,8 @@ export default function Lamp({
           args={[0.84, 2.98, 0.025]}
         />
       </mesh>
+
+      {/* LUMINOUS CORE */}
 
       <mesh
         ref={innerPanel}
@@ -691,6 +673,8 @@ export default function Lamp({
           args={[0.78, 2.9, 0.035]}
         />
       </mesh>
+
+      {/* TOP CAP */}
 
       <mesh
         ref={topCap}
@@ -703,6 +687,8 @@ export default function Lamp({
         />
       </mesh>
 
+      {/* BOTTOM CAP */}
+
       <mesh
         ref={bottomCap}
         position={[0, -0.48, 0]}
@@ -714,6 +700,8 @@ export default function Lamp({
         />
       </mesh>
 
+      {/* NECK */}
+
       <mesh
         ref={neck}
         position={[0, -0.64, 0]}
@@ -723,6 +711,8 @@ export default function Lamp({
           args={[0.2, 0.2, 0.25, 64]}
         />
       </mesh>
+
+      {/* BASE */}
 
       <mesh
         ref={base}
@@ -735,6 +725,8 @@ export default function Lamp({
         />
       </mesh>
 
+      {/* BASE RING */}
+
       <mesh
         ref={baseRing}
         position={[0, -0.74, 0]}
@@ -744,23 +736,6 @@ export default function Lamp({
           args={[0.4, 0.45, 0.025, 96]}
         />
       </mesh>
-
-      <pointLight
-        ref={glowLight}
-        position={[0, 1.25, 0.82]}
-        intensity={0.82}
-        distance={3.7}
-        decay={2}
-        color="#ffbd63"
-      />
-
-      <pointLight
-        position={[0, 1.25, -0.25]}
-        intensity={0.12}
-        distance={2.4}
-        decay={2}
-        color="#fff0d0"
-      />
     </group>
   );
 }
