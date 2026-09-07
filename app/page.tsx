@@ -1,684 +1,1025 @@
+
 "use client";
 
-import { Canvas } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
-import {
-  Bloom,
-  EffectComposer,
-} from "@react-three/postprocessing";
-import {
-  motion,
-  useMotionValueEvent,
-  useScroll,
-  useTransform,
-} from "motion/react";
-import { useRef, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { MotionValue } from "motion/react";
+import * as THREE from "three";
+import { useMemo, useRef } from "react";
 
-import Lamp from "./Lamp";
+type LampProps = {
+  progress: MotionValue<number>;
+};
 
-export default function Home() {
-  const container = useRef<HTMLDivElement>(null);
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
-  const { scrollYProgress } = useScroll({
-    target: container,
-    offset: ["start start", "end end"],
+function clamp01(value: number) {
+  return THREE.MathUtils.clamp(value, 0, 1);
+}
+
+function smooth(value: number) {
+  const x = clamp01(value);
+  return x * x * (3 - 2 * x);
+}
+
+function range(value: number, start: number, end: number) {
+  if (end === start) return 0;
+
+  return clamp01(
+    (value - start) / (end - start)
+  );
+}
+
+function lerp(
+  value: number,
+  start: number,
+  end: number
+) {
+  return THREE.MathUtils.lerp(
+    start,
+    end,
+    value
+  );
+}
+
+/* =========================================================
+   LAMP
+   ========================================================= */
+
+export default function Lamp({
+  progress,
+}: LampProps) {
+  /* =======================================================
+     REFS
+     ======================================================= */
+
+  const root = useRef<THREE.Group>(null);
+
+  const shellLeft = useRef<THREE.Mesh>(null);
+  const shellRight = useRef<THREE.Mesh>(null);
+
+  const innerPanel = useRef<THREE.Mesh>(null);
+
+  const topCap = useRef<THREE.Mesh>(null);
+  const bottomCap = useRef<THREE.Mesh>(null);
+
+  const neck = useRef<THREE.Mesh>(null);
+  const base = useRef<THREE.Mesh>(null);
+  const baseRing = useRef<THREE.Mesh>(null);
+
+  const glowLight = useRef<THREE.PointLight>(null);
+
+  const { camera } = useThree();
+
+  /* =======================================================
+     COLORS
+     ======================================================= */
+
+  const warmColor = useMemo(
+    () => new THREE.Color("#FFBD63"),
+    []
+  );
+
+  const neutralColor = useMemo(
+    () => new THREE.Color("#FFF2D6"),
+    []
+  );
+
+  const coolColor = useMemo(
+    () => new THREE.Color("#DCE9FF"),
+    []
+  );
+
+  const finalWarmColor = useMemo(
+    () => new THREE.Color("#FFCA78"),
+    []
+  );
+
+  /* =======================================================
+     MATERIALS
+
+     MAIN BODY
+     Light sage / olive metallic.
+     ======================================================= */
+
+  const metal = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: "#A8B29D",
+
+        metalness: 0.88,
+        roughness: 0.24,
+
+        clearcoat: 0.75,
+        clearcoatRoughness: 0.18,
+      }),
+    []
+  );
+
+  /* =======================================================
+     DARKER STRUCTURAL METAL
+     ======================================================= */
+
+  const darkMetal = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: "#68725F",
+
+        metalness: 0.92,
+        roughness: 0.22,
+
+        clearcoat: 0.65,
+        clearcoatRoughness: 0.18,
+      }),
+    []
+  );
+
+  /* =======================================================
+     LIGHT METALLIC ACCENT
+     ======================================================= */
+
+  const lightMetal = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: "#C4CCB9",
+
+        metalness: 0.9,
+        roughness: 0.2,
+
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.15,
+      }),
+    []
+  );
+
+  /* =======================================================
+     LIGHT PANEL
+
+     Slightly creamy rather than aggressively orange.
+     ======================================================= */
+
+  const lightMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#FFF4DE",
+
+        emissive: "#FFB34D",
+        emissiveIntensity: 0.72,
+
+        roughness: 0.28,
+      }),
+    []
+  );
+
+  /* =======================================================
+     INNER DARK FRAME
+     ======================================================= */
+
+  const innerDarkMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#34382F",
+
+        roughness: 0.34,
+        metalness: 0.35,
+      }),
+    []
+  );
+
+  /* =========================================================
+     FRAME LOOP
+     ========================================================= */
+
+  useFrame((_, delta) => {
+    if (!root.current) return;
+
+    const p = progress.get();
+
+    /* =====================================================
+       CINEMATIC ROTATION
+       ===================================================== */
+
+    let targetRotation = 0;
+
+    if (p < 0.12) {
+      const t = smooth(
+        range(p, 0, 0.12)
+      );
+
+      targetRotation = lerp(
+        t,
+        -0.08,
+        0.16
+      );
+    } else if (p < 0.28) {
+      const t = smooth(
+        range(p, 0.12, 0.28)
+      );
+
+      targetRotation = lerp(
+        t,
+        0.16,
+        Math.PI * 0.48
+      );
+    } else if (p < 0.40) {
+      const t = smooth(
+        range(p, 0.28, 0.40)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 0.48,
+        Math.PI * 0.75
+      );
+    } else if (p < 0.58) {
+      const t = smooth(
+        range(p, 0.40, 0.58)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 0.75,
+        Math.PI * 2.35
+      );
+    } else if (p < 0.73) {
+      const t = smooth(
+        range(p, 0.58, 0.73)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 2.35,
+        Math.PI * 2.55
+      );
+    } else if (p < 0.87) {
+      const t = smooth(
+        range(p, 0.73, 0.87)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 2.55,
+        Math.PI * 3.18
+      );
+    } else {
+      const t = smooth(
+        range(p, 0.87, 1)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 3.18,
+        Math.PI * 3.72
+      );
+    }
+
+    root.current.rotation.y =
+      THREE.MathUtils.damp(
+        root.current.rotation.y,
+        targetRotation,
+        3,
+        delta
+      );
+
+    /* =====================================================
+       CAMERA
+       ===================================================== */
+
+    let targetX = 0;
+    let targetY = 0.72;
+    let targetZ = 6;
+
+    if (p < 0.12) {
+      const t = smooth(
+        range(p, 0, 0.12)
+      );
+
+      targetX = lerp(t, 0, 0.1);
+      targetY = lerp(t, 0.72, 0.8);
+      targetZ = lerp(t, 6.4, 5.9);
+    } else if (p < 0.28) {
+      const t = smooth(
+        range(p, 0.12, 0.28)
+      );
+
+      targetX = lerp(t, 0.1, -0.65);
+      targetY = lerp(t, 0.8, 0.95);
+      targetZ = lerp(t, 5.9, 5.15);
+    } else if (p < 0.40) {
+      const t = smooth(
+        range(p, 0.28, 0.40)
+      );
+
+      targetX = lerp(t, -0.65, 0.5);
+      targetY = lerp(t, 0.95, 0.58);
+      targetZ = lerp(t, 5.15, 5.75);
+    } else if (p < 0.58) {
+      const t = smooth(
+        range(p, 0.40, 0.58)
+      );
+
+      targetX = lerp(t, 0.5, -0.9);
+      targetY = lerp(t, 0.58, 1.15);
+      targetZ = lerp(t, 5.75, 4.55);
+    } else if (p < 0.73) {
+      const t = smooth(
+        range(p, 0.58, 0.73)
+      );
+
+      targetX = lerp(t, -0.9, 0.3);
+      targetY = lerp(t, 1.15, 0.68);
+      targetZ = lerp(t, 4.55, 6.25);
+    } else if (p < 0.87) {
+      const t = smooth(
+        range(p, 0.73, 0.87)
+      );
+
+      targetX = lerp(t, 0.3, -0.42);
+      targetY = lerp(t, 0.68, 0.82);
+      targetZ = lerp(t, 6.25, 5.15);
+    } else {
+      const t = smooth(
+        range(p, 0.87, 1)
+      );
+
+      targetX = lerp(t, -0.42, 0);
+      targetY = lerp(t, 0.82, 0.72);
+      targetZ = lerp(t, 5.15, 6.2);
+    }
+
+    camera.position.x =
+      THREE.MathUtils.damp(
+        camera.position.x,
+        targetX,
+        2.4,
+        delta
+      );
+
+    camera.position.y =
+      THREE.MathUtils.damp(
+        camera.position.y,
+        targetY,
+        2.4,
+        delta
+      );
+
+    camera.position.z =
+      THREE.MathUtils.damp(
+        camera.position.z,
+        targetZ,
+        2.4,
+        delta
+      );
+
+    camera.lookAt(
+      0,
+      1.05,
+      0
+    );
+
+    /* =====================================================
+       DECONSTRUCTION
+       ===================================================== */
+
+    const breakIn = smooth(
+      range(p, 0.415, 0.50)
+    );
+
+    const breakOut = smooth(
+      range(p, 0.50, 0.585)
+    );
+
+    const separation =
+      breakIn *
+      (1 - breakOut);
+
+    /* LEFT SHELL */
+
+    if (shellLeft.current) {
+      shellLeft.current.position.x =
+        THREE.MathUtils.damp(
+          shellLeft.current.position.x,
+          -0.31 -
+            separation * 1.35,
+          5,
+          delta
+        );
+
+      shellLeft.current.position.y =
+        THREE.MathUtils.damp(
+          shellLeft.current.position.y,
+          1.3 +
+            separation * 0.3,
+          5,
+          delta
+        );
+
+      shellLeft.current.rotation.z =
+        THREE.MathUtils.damp(
+          shellLeft.current.rotation.z,
+          separation * 0.2,
+          5,
+          delta
+        );
+
+      shellLeft.current.rotation.x =
+        THREE.MathUtils.damp(
+          shellLeft.current.rotation.x,
+          separation * 0.12,
+          5,
+          delta
+        );
+    }
+
+    /* RIGHT SHELL */
+
+    if (shellRight.current) {
+      shellRight.current.position.x =
+        THREE.MathUtils.damp(
+          shellRight.current.position.x,
+          0.31 +
+            separation * 1.35,
+          5,
+          delta
+        );
+
+      shellRight.current.position.y =
+        THREE.MathUtils.damp(
+          shellRight.current.position.y,
+          1.3 -
+            separation * 0.3,
+          5,
+          delta
+        );
+
+      shellRight.current.rotation.z =
+        THREE.MathUtils.damp(
+          shellRight.current.rotation.z,
+          -separation * 0.2,
+          5,
+          delta
+        );
+
+      shellRight.current.rotation.x =
+        THREE.MathUtils.damp(
+          shellRight.current.rotation.x,
+          -separation * 0.12,
+          5,
+          delta
+        );
+    }
+
+    /* INNER PANEL */
+
+    if (innerPanel.current) {
+      innerPanel.current.position.z =
+        THREE.MathUtils.damp(
+          innerPanel.current.position.z,
+          0.38 +
+            separation * 1.5,
+          5,
+          delta
+        );
+
+      innerPanel.current.rotation.y =
+        THREE.MathUtils.damp(
+          innerPanel.current.rotation.y,
+          separation * 0.35,
+          5,
+          delta
+        );
+    }
+
+    /* TOP CAP */
+
+    if (topCap.current) {
+      topCap.current.position.y =
+        THREE.MathUtils.damp(
+          topCap.current.position.y,
+          3.08 +
+            separation * 0.72,
+          5,
+          delta
+        );
+
+      topCap.current.rotation.z =
+        THREE.MathUtils.damp(
+          topCap.current.rotation.z,
+          separation * 0.14,
+          5,
+          delta
+        );
+    }
+
+    /* BOTTOM CAP */
+
+    if (bottomCap.current) {
+      bottomCap.current.position.y =
+        THREE.MathUtils.damp(
+          bottomCap.current.position.y,
+          -0.48 -
+            separation * 0.72,
+          5,
+          delta
+        );
+
+      bottomCap.current.rotation.z =
+        THREE.MathUtils.damp(
+          bottomCap.current.rotation.z,
+          -separation * 0.14,
+          5,
+          delta
+        );
+    }
+
+    /* =====================================================
+       FLOATING BASE
+       ===================================================== */
+
+    if (neck.current) {
+      neck.current.position.y =
+        THREE.MathUtils.damp(
+          neck.current.position.y,
+          -0.64 -
+            separation * 0.12,
+          5,
+          delta
+        );
+    }
+
+    if (base.current) {
+      base.current.position.y =
+        THREE.MathUtils.damp(
+          base.current.position.y,
+          -0.68 -
+            separation * 0.08,
+          5,
+          delta
+        );
+
+      base.current.rotation.y =
+        THREE.MathUtils.damp(
+          base.current.rotation.y,
+          separation * 0.55,
+          5,
+          delta
+        );
+    }
+
+    if (baseRing.current) {
+      baseRing.current.rotation.y =
+        THREE.MathUtils.damp(
+          baseRing.current.rotation.y,
+          separation * -0.7,
+          5,
+          delta
+        );
+    }
+
+    /* =====================================================
+       LIGHT TEMPERATURE
+       ===================================================== */
+
+    const targetColor =
+      new THREE.Color();
+
+    let targetIntensity = 0.82;
+
+    if (p < 0.27) {
+      targetColor.copy(
+        warmColor
+      );
+
+      targetIntensity = 0.82;
+    }
+
+    if (
+      p >= 0.27 &&
+      p < 0.38
+    ) {
+      const t = smooth(
+        range(p, 0.27, 0.38)
+      );
+
+      targetColor.lerpColors(
+        warmColor,
+        neutralColor,
+        t
+      );
+
+      targetIntensity = lerp(
+        t,
+        0.82,
+        0.64
+      );
+    }
+
+    if (
+      p >= 0.38 &&
+      p < 0.45
+    ) {
+      const t = smooth(
+        range(p, 0.38, 0.45)
+      );
+
+      targetColor.lerpColors(
+        neutralColor,
+        coolColor,
+        t
+      );
+
+      targetIntensity = lerp(
+        t,
+        0.64,
+        0.4
+      );
+    }
+
+    if (
+      p >= 0.45 &&
+      p < 0.59
+    ) {
+      targetColor.copy(
+        coolColor
+      );
+
+      targetIntensity = 0.4;
+    }
+
+    if (
+      p >= 0.59 &&
+      p < 0.75
+    ) {
+      const t = smooth(
+        range(p, 0.59, 0.75)
+      );
+
+      targetColor.lerpColors(
+        coolColor,
+        warmColor,
+        t
+      );
+
+      targetIntensity = lerp(
+        t,
+        0.4,
+        0.82
+      );
+    }
+
+    if (p >= 0.75) {
+      targetColor.copy(
+        finalWarmColor
+      );
+
+      targetIntensity = 0.84;
+    }
+
+    if (glowLight.current) {
+      glowLight.current.color.lerp(
+        targetColor,
+        1 -
+          Math.exp(
+            -4 * delta
+          )
+      );
+
+      glowLight.current.intensity =
+        THREE.MathUtils.damp(
+          glowLight.current.intensity,
+          targetIntensity,
+          4,
+          delta
+        );
+    }
+
+    /* =====================================================
+       FLOAT
+       ===================================================== */
+
+    const time =
+      performance.now();
+
+    const float =
+      Math.sin(
+        time * 0.00055
+      ) * 0.018;
+
+    const secondaryFloat =
+      Math.sin(
+        time * 0.00031
+      ) * 0.006;
+
+    root.current.position.y =
+      THREE.MathUtils.damp(
+        root.current.position.y,
+        -0.25 +
+          float +
+          secondaryFloat,
+        3,
+        delta
+      );
+
+    /* =====================================================
+       CINEMATIC TILT
+       ===================================================== */
+
+    let targetTilt = 0;
+
+    if (
+      p > 0.14 &&
+      p < 0.28
+    ) {
+      targetTilt = 0.025;
+    }
+
+    if (
+      p > 0.415 &&
+      p < 0.585
+    ) {
+      targetTilt = -0.055;
+    }
+
+    if (
+      p > 0.73 &&
+      p < 0.87
+    ) {
+      targetTilt = 0.018;
+    }
+
+    root.current.rotation.x =
+      THREE.MathUtils.damp(
+        root.current.rotation.x,
+        targetTilt,
+        3,
+        delta
+      );
   });
 
-  /*
-   * =========================================================
-   * SCENE NUMBER
-   * =========================================================
-   *
-   * IMPORTANT:
-   * Motion values are objects, so we cannot directly do:
-   *
-   * {sceneNumber}
-   *
-   * We keep the animated value internally and convert it
-   * into normal React state for the text.
-   */
-
-  const [currentScene, setCurrentScene] = useState("01");
-
-  useMotionValueEvent(
-    scrollYProgress,
-    "change",
-    (latest) => {
-      let scene = "01";
-
-      if (latest >= 0.88) {
-        scene = "07";
-      } else if (latest >= 0.725) {
-        scene = "06";
-      } else if (latest >= 0.58) {
-        scene = "05";
-      } else if (latest >= 0.415) {
-        scene = "04";
-      } else if (latest >= 0.275) {
-        scene = "03";
-      } else if (latest >= 0.135) {
-        scene = "02";
-      }
-
-      setCurrentScene(scene);
-    }
-  );
-
-  /*
-   * =========================================================
-   * BACKGROUND
-   * =========================================================
-   */
-
-  const background = useTransform(
-    scrollYProgress,
-    [
-      0,
-      0.115,
-      0.25,
-      0.39,
-      0.53,
-      0.67,
-      0.80,
-      0.91,
-      1,
-    ],
-    [
-      "#020202",
-      "#070707",
-      "#bcb7ae",
-      "#d2cdc4",
-      "#0a0a0a",
-      "#87827a",
-      "#c6c1b8",
-      "#050505",
-      "#020202",
-    ]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 01 — REVEAL
-   * =========================================================
-   */
-
-  const s1Opacity = useTransform(
-    scrollYProgress,
-    [0, 0.055, 0.10, 0.135],
-    [1, 1, 0.55, 0]
-  );
-
-  const s1Y = useTransform(
-    scrollYProgress,
-    [0, 0.12],
-    [0, -45]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 02 — FORM
-   * =========================================================
-   */
-
-  const s2Opacity = useTransform(
-    scrollYProgress,
-    [0.135, 0.17, 0.235, 0.27],
-    [0, 1, 1, 0]
-  );
-
-  const s2X = useTransform(
-    scrollYProgress,
-    [0.16, 0.23],
-    [-70, 0]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 03 — LIGHT
-   * =========================================================
-   */
-
-  const s3Opacity = useTransform(
-    scrollYProgress,
-    [0.275, 0.31, 0.37, 0.405],
-    [0, 1, 1, 0]
-  );
-
-  const s3Y = useTransform(
-    scrollYProgress,
-    [0.29, 0.37],
-    [40, 0]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 04 — DECONSTRUCTION
-   * =========================================================
-   */
-
-  const s4Opacity = useTransform(
-    scrollYProgress,
-    [0.415, 0.45, 0.535, 0.575],
-    [0, 1, 1, 0]
-  );
-
-  const s4TitleX = useTransform(
-    scrollYProgress,
-    [0.43, 0.49],
-    [-90, 0]
-  );
-
-  const s4TitleY = useTransform(
-    scrollYProgress,
-    [0.43, 0.49],
-    [35, 0]
-  );
-
-  const s4MetaX = useTransform(
-    scrollYProgress,
-    [0.44, 0.52],
-    [80, 0]
-  );
-
-  const s4Graphic = useTransform(
-    scrollYProgress,
-    [0.44, 0.49, 0.55],
-    [0, 1, 0]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 05 — STATEMENT
-   * =========================================================
-   */
-
-  const s5Opacity = useTransform(
-    scrollYProgress,
-    [0.58, 0.615, 0.68, 0.72],
-    [0, 1, 1, 0]
-  );
-
-  const s5Y = useTransform(
-    scrollYProgress,
-    [0.60, 0.68],
-    [55, 0]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 06 — DETAILS
-   * =========================================================
-   */
-
-  const s6Opacity = useTransform(
-    scrollYProgress,
-    [0.725, 0.76, 0.83, 0.87],
-    [0, 1, 1, 0]
-  );
-
-  const s6X = useTransform(
-    scrollYProgress,
-    [0.74, 0.81],
-    [-60, 0]
-  );
-
-  /*
-   * =========================================================
-   * SCENE 07 — FINALE
-   * =========================================================
-   */
-
-  const s7Opacity = useTransform(
-    scrollYProgress,
-    [0.88, 0.94, 1],
-    [0, 1, 1]
-  );
-
-  const s7Y = useTransform(
-    scrollYProgress,
-    [0.89, 0.97],
-    [35, 0]
-  );
-
-  /*
-   * =========================================================
-   * PAGE
-   * =========================================================
-   */
+  /* =========================================================
+     MODEL
+     ========================================================= */
 
   return (
-    <main
-      ref={container}
-      className="relative w-full"
-      style={{
-        height: "700vh",
-      }}
+    <group
+      ref={root}
+      position={[
+        0,
+        -0.55,
+        0,
+      ]}
+      scale={0.68}
     >
-      <motion.div
-        className="fixed inset-0 overflow-hidden"
-        style={{
-          background,
-        }}
+      {/* ===================================================
+          LEFT SHELL
+          =================================================== */}
+
+      <mesh
+        ref={shellLeft}
+        position={[
+          -0.31,
+          1.3,
+          0,
+        ]}
+        material={metal}
+        castShadow
+        receiveShadow
       >
+        <boxGeometry
+          args={[
+            0.62,
+            3.5,
+            0.72,
+          ]}
+        />
+      </mesh>
 
-        {/* =================================================
-            3D WORLD
-        ================================================= */}
+      {/* ===================================================
+          RIGHT SHELL
+          =================================================== */}
 
-        <Canvas
-          camera={{
-            position: [0, 0.7, 6],
-            fov: 38,
-            near: 0.1,
-            far: 100,
-          }}
-          dpr={[1, 1.5]}
-          gl={{
-            antialias: true,
-            powerPreference: "high-performance",
-          }}
-        >
-          <ambientLight intensity={0.10} />
+      <mesh
+        ref={shellRight}
+        position={[
+          0.31,
+          1.3,
+          0,
+        ]}
+        material={metal}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry
+          args={[
+            0.62,
+            3.5,
+            0.72,
+          ]}
+        />
+      </mesh>
 
-          <directionalLight
-            position={[4, 6, 5]}
-            intensity={0.38}
-          />
+      {/* ===================================================
+          DARK INNER FRAME
+          =================================================== */}
 
-          <directionalLight
-            position={[-4, 2, -3]}
-            intensity={0.12}
-          />
+      <mesh
+        position={[
+          0,
+          1.3,
+          0.355,
+        ]}
+        material={
+          innerDarkMaterial
+        }
+      >
+        <boxGeometry
+          args={[
+            0.84,
+            2.98,
+            0.025,
+          ]}
+        />
+      </mesh>
 
-          <Environment preset="studio" />
+      {/* ===================================================
+          LIGHT PANEL
+          =================================================== */}
 
-          <Lamp
-            progress={scrollYProgress}
-          />
+      <mesh
+        ref={innerPanel}
+        position={[
+          0,
+          1.3,
+          0.38,
+        ]}
+        material={
+          lightMaterial
+        }
+      >
+        <boxGeometry
+          args={[
+            0.78,
+            2.9,
+            0.035,
+          ]}
+        />
+      </mesh>
 
-          <EffectComposer>
-            <Bloom
-              intensity={0.12}
-              luminanceThreshold={1.08}
-              luminanceSmoothing={0.92}
-              mipmapBlur
-            />
-          </EffectComposer>
-        </Canvas>
+      {/* ===================================================
+          TOP CAP
+          =================================================== */}
 
-        {/* =================================================
-            MINIMAL HEADER
-        ================================================= */}
+      <mesh
+        ref={topCap}
+        position={[
+          0,
+          3.08,
+          0,
+        ]}
+        material={metal}
+        castShadow
+      >
+        <boxGeometry
+          args={[
+            1.32,
+            0.14,
+            0.78,
+          ]}
+        />
+      </mesh>
 
-        <div className="pointer-events-none absolute left-7 right-7 top-7 z-50 flex items-center justify-between md:left-10 md:right-10 md:top-9">
-          <p className="text-[9px] uppercase tracking-[0.55em] text-white/55 mix-blend-difference">
-            LUMORA
-          </p>
+      {/* ===================================================
+          BOTTOM CAP
+          =================================================== */}
 
-          <p className="text-[8px] uppercase tracking-[0.45em] text-white/35 mix-blend-difference">
-            OBJECT / {currentScene}
-          </p>
-        </div>
+      <mesh
+        ref={bottomCap}
+        position={[
+          0,
+          -0.48,
+          0,
+        ]}
+        material={metal}
+        castShadow
+      >
+        <boxGeometry
+          args={[
+            1.32,
+            0.14,
+            0.78,
+          ]}
+        />
+      </mesh>
 
-        {/* =================================================
-            SCENE 01 — REVEAL
-        ================================================= */}
+      {/* ===================================================
+          NECK
+          =================================================== */}
 
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: s1Opacity,
-            y: s1Y,
-          }}
-        >
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
+      <mesh
+        ref={neck}
+        position={[
+          0,
+          -0.64,
+          0,
+        ]}
+        material={
+          lightMetal
+        }
+        castShadow
+      >
+        <cylinderGeometry
+          args={[
+            0.2,
+            0.2,
+            0.25,
+            64,
+          ]}
+        />
+      </mesh>
 
-              <p className="mb-7 text-[9px] uppercase tracking-[0.72em] text-white/45">
-                LUMORA
-              </p>
+      {/* ===================================================
+          BASE
+          =================================================== */}
 
+      <mesh
+        ref={base}
+        position={[
+          0,
+          -0.68,
+          0,
+        ]}
+        material={
+          darkMetal
+        }
+        castShadow
+        receiveShadow
+      >
+        <cylinderGeometry
+          args={[
+            0.5,
+            0.56,
+            0.055,
+            96,
+          ]}
+        />
+      </mesh>
 
-            </div>
-          </div>
+      {/* ===================================================
+          BASE RING
+          =================================================== */}
 
-          <div className="absolute left-7 top-[12%] md:left-10">
-            <p className="text-[8px] uppercase tracking-[0.5em] text-white/25">
-              01 / REVEAL
-            </p>
-          </div>
+      <mesh
+        ref={baseRing}
+        position={[
+          0,
+          -0.74,
+          0,
+        ]}
+        material={metal}
+      >
+        <cylinderGeometry
+          args={[
+            0.4,
+            0.45,
+            0.025,
+            96,
+          ]}
+        />
+      </mesh>
 
-          <div className="absolute bottom-[8%] left-1/2 -translate-x-1/2 text-center">
-            <p className="text-[8px] uppercase tracking-[0.42em] text-white/25">
-              SCROLL TO EXPLORE
-            </p>
+      {/* ===================================================
+          PRIMARY GLOW
+          =================================================== */}
 
-            <div className="mx-auto mt-4 h-8 w-px bg-white/15" />
-          </div>
-        </motion.section>
+      <pointLight
+        ref={glowLight}
+        position={[
+          0,
+          1.25,
+          0.82,
+        ]}
+        intensity={0.82}
+        distance={3.7}
+        decay={2}
+        color="#FFBD63"
+      />
 
-        {/* =================================================
-            SCENE 02 — FORM
-        ================================================= */}
+      {/* ===================================================
+          SECONDARY FILL
+          =================================================== */}
 
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: s2Opacity,
-          }}
-        >
-          <motion.div
-            className="absolute left-[7%] top-[18%]"
-            style={{
-              x: s2X,
-            }}
-          >
-            <p className="mb-4 text-[8px] uppercase tracking-[0.5em] text-black/30">
-              02 / FORM
-            </p>
-
-            <h2 className="text-6xl font-light tracking-[-0.06em] text-black/65 md:text-8xl lg:text-9xl">
-              FORM
-            </h2>
-          </motion.div>
-
-          <div className="absolute bottom-[14%] left-[7%]">
-            <p className="max-w-[190px] text-[8px] uppercase leading-5 tracking-[0.15em] text-black/30">
-              Proportion.
-              <br />
-              Structure.
-              <br />
-              Presence.
-            </p>
-          </div>
-
-          <div className="absolute right-[7%] top-[25%] text-right">
-            <p className="text-[8px] uppercase tracking-[0.45em] text-black/30">
-              LIGHT
-            </p>
-
-            <p className="mt-4 text-[8px] uppercase tracking-[0.45em] text-black/30">
-              SHADOW
-            </p>
-
-            <p className="mt-4 text-[8px] uppercase tracking-[0.45em] text-black/30">
-              MATERIAL
-            </p>
-          </div>
-        </motion.section>
-
-        {/* =================================================
-            SCENE 03 — LIGHT
-        ================================================= */}
-
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-          style={{
-            opacity: s3Opacity,
-          }}
-        >
-          <motion.div
-            className="text-center"
-            style={{
-              y: s3Y,
-            }}
-          >
-            <p className="mb-7 text-[8px] uppercase tracking-[0.58em] text-black/30">
-              03 / LIGHT
-            </p>
-
-            <h2 className="text-4xl font-light leading-[1.06] tracking-[-0.035em] text-black/65 md:text-6xl lg:text-7xl">
-              ONE FORM.
-              <br />
-              EVERY MOOD.
-            </h2>
-
-            <div className="mx-auto mt-10 h-px w-24 bg-black/15" />
-
-            <div className="mt-8 flex justify-center gap-8 md:gap-12">
-              <span className="text-[8px] uppercase tracking-[0.38em] text-black/30">
-                WARM
-              </span>
-
-              <span className="text-[8px] uppercase tracking-[0.38em] text-black/30">
-                NEUTRAL
-              </span>
-
-              <span className="text-[8px] uppercase tracking-[0.38em] text-black/30">
-                COOL
-              </span>
-            </div>
-          </motion.div>
-        </motion.section>
-
-        {/* =================================================
-            SCENE 04 — MOTION
-        ================================================= */}
-
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: s4Opacity,
-          }}
-        >
-          <motion.div
-            className="absolute left-[7%] top-[14%]"
-            style={{
-              x: s4TitleX,
-              y: s4TitleY,
-            }}
-          >
-            <p className="mb-5 text-[8px] uppercase tracking-[0.5em] text-white/25">
-              04 / MOTION
-            </p>
-
-            <h2 className="text-4xl font-light leading-[1.03] tracking-[-0.045em] text-white/78 md:text-6xl lg:text-7xl">
-              ENGINEERED
-              <br />
-              TO MOVE.
-            </h2>
-          </motion.div>
-
-          <motion.div
-            className="absolute bottom-[15%] right-[7%] text-right"
-            style={{
-              x: s4MetaX,
-            }}
-          >
-            <p className="text-[8px] uppercase tracking-[0.45em] text-white/25">
-              FORM
-            </p>
-
-            <p className="mt-4 text-[8px] uppercase tracking-[0.45em] text-white/25">
-              COMPONENTS
-            </p>
-
-            <p className="mt-4 text-[8px] uppercase tracking-[0.45em] text-white/25">
-              PRECISION
-            </p>
-          </motion.div>
-
-          <motion.div
-            className="absolute left-[7%] right-[7%] top-1/2 h-px origin-center bg-white/10"
-            style={{
-              scaleX: s4Graphic,
-            }}
-          />
-
-          <motion.div
-            className="absolute bottom-[9%] left-1/2 top-[9%] w-px origin-center bg-white/10"
-            style={{
-              scaleY: s4Graphic,
-            }}
-          />
-
-          <motion.div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{
-              opacity: s4Graphic,
-              scale: s4Graphic,
-            }}
-          >
-            <div className="h-5 w-5 rounded-full border border-white/15" />
-          </motion.div>
-        </motion.section>
-
-        {/* =================================================
-            SCENE 05 — PRESENCE
-        ================================================= */}
-
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: s5Opacity,
-          }}
-        >
-          <motion.div
-            className="absolute bottom-[13%] left-[8%]"
-            style={{
-              y: s5Y,
-            }}
-          >
-            <p className="mb-6 text-[8px] uppercase tracking-[0.5em] text-black/30">
-              05 / PRESENCE
-            </p>
-
-            <h2 className="text-3xl font-light leading-[1.07] tracking-[-0.035em] text-black/65 md:text-5xl lg:text-6xl">
-              A STATEMENT,
-              <br />
-              EVEN WHEN
-              <br />
-              IT&apos;S OFF.
-            </h2>
-          </motion.div>
-
-          <div className="absolute right-[8%] top-[15%]">
-            <p className="text-[8px] uppercase tracking-[0.45em] text-black/25">
-              OBJECT / 01
-            </p>
-          </div>
-        </motion.section>
-
-        {/* =================================================
-            SCENE 06 — DETAILS
-        ================================================= */}
-
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: s6Opacity,
-          }}
-        >
-          <motion.div
-            className="absolute left-[8%] top-[11%]"
-            style={{
-              x: s6X,
-            }}
-          >
-            <p className="mb-11 text-[8px] uppercase tracking-[0.5em] text-black/30">
-              06 / DETAILS
-            </p>
-
-            <div className="space-y-8">
-
-              <div>
-                <p className="text-[8px] uppercase tracking-[0.35em] text-black/25">
-                  01
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[8px] uppercase tracking-[0.35em] text-black/25">
-                  02
-                </p>
-
-                <h3 className="mt-2 text-xl font-light tracking-wide text-black/65 md:text-3xl">
-                  ADAPTIVE LIGHT
-                </h3>
-              </div>
-
-              <div>
-                <p className="text-[8px] uppercase tracking-[0.35em] text-black/25">
-                  03
-                </p>
-
-                <h3 className="mt-2 text-xl font-light tracking-wide text-black/65 md:text-3xl">
-                  TOUCH CONTROL
-                </h3>
-              </div>
-
-            </div>
-          </motion.div>
-
-          <div className="absolute bottom-[12%] right-[8%] text-right">
-            <p className="text-[8px] uppercase tracking-[0.42em] text-black/25">
-              DESIGNED
-            </p>
-
-            <p className="mt-3 text-[8px] uppercase tracking-[0.42em] text-black/25">
-              WITH INTENTION
-            </p>
-          </div>
-        </motion.section>
-
-        {/* =================================================
-            SCENE 07 — FINALE
-        ================================================= */}
-
-        <motion.section
-          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-          style={{
-            opacity: s7Opacity,
-          }}
-        >
-          <motion.div
-            className="text-center"
-            style={{
-              y: s7Y,
-            }}
-          >
-            <p className="mb-7 text-[9px] uppercase tracking-[0.72em] text-white/40">
-              LUMORA
-            </p>
-
-            <h3 className="text-4xl font-light leading-[1.04] tracking-[0.055em] text-black/88 md:text-6xl lg:text-8xl">
-              LIGHT
-              <br />
-              SHAPES MOOD.
-            </h3>
-
-            <div className="mx-auto mt-8 h-px w-16 bg-white/15" />
-
-            <button
-              className="
-                pointer-events-auto
-                mt-10
-                border
-                border-white/25
-                px-9
-                py-4
-                text-[8px]
-                uppercase
-                tracking-[0.45em]
-                text-white/65
-                transition-all
-                duration-500
-                hover:bg-white
-                hover:text-black
-              "
-            >
-              EXPLORE LUMORA
-            </button>
-          </motion.div>
-
-          <div className="absolute top-[11%]">
-            <p className="text-[8px] uppercase tracking-[0.5em] text-white/22">
-              07 / FINALE
-            </p>
-          </div>
-        </motion.section>
-
-      </motion.div>
-    </main>
+      <pointLight
+        position={[
+          0,
+          1.25,
+          -0.25,
+        ]}
+        intensity={0.12}
+        distance={2.4}
+        decay={2}
+        color="#FFF0D0"
+      />
+    </group>
   );
 }
