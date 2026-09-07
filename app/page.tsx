@@ -109,7 +109,7 @@ function Scene({
         position: [0, 0.7, 6.3],
         fov: 38,
       }}
-      dpr={[1, 1.8]}
+     dpr={[1, 1.25]}
       gl={{
         antialias: true,
         powerPreference: "high-performance",
@@ -148,12 +148,12 @@ function Scene({
         <Lamp progress={progress} />
 
         <EffectComposer>
-          <Bloom
-            intensity={0.72}
-            luminanceThreshold={0.82}
-            luminanceSmoothing={0.7}
-            mipmapBlur
-          />
+        <Bloom
+  intensity={0.48}
+  luminanceThreshold={0.9}
+  luminanceSmoothing={0.9}
+  mipmapBlur
+/>
 
           <Vignette
             eskil={false}
