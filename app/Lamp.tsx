@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
@@ -9,6 +10,10 @@ type LampProps = {
   progress: MotionValue<number>;
 };
 
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
 function clamp01(value: number) {
   return THREE.MathUtils.clamp(value, 0, 1);
 }
@@ -18,11 +23,7 @@ function smooth(value: number) {
   return x * x * (3 - 2 * x);
 }
 
-function range(
-  value: number,
-  start: number,
-  end: number
-) {
+function range(value: number, start: number, end: number) {
   if (end === start) return 0;
 
   return clamp01(
@@ -35,12 +36,24 @@ function lerp(
   start: number,
   end: number
 ) {
-  return THREE.MathUtils.lerp(start, end, value);
+  return THREE.MathUtils.lerp(
+    start,
+    end,
+    value
+  );
 }
+
+/* =========================================================
+   LAMP
+   ========================================================= */
 
 export default function Lamp({
   progress,
 }: LampProps) {
+  /* =======================================================
+     REFS
+     ======================================================= */
+
   const root = useRef<THREE.Group>(null);
 
   const shellLeft = useRef<THREE.Mesh>(null);
@@ -57,283 +70,317 @@ export default function Lamp({
 
   const glowLight = useRef<THREE.PointLight>(null);
 
-  const cameraGroup = useRef<THREE.Group>(null);
-
   const { camera } = useThree();
 
-  /*
-   * =========================================================
-   * MATERIALS
-   * =========================================================
-   */
+  /* =======================================================
+     COLORS
+     ======================================================= */
+
+  const warmColor = useMemo(
+    () => new THREE.Color("#FFBD63"),
+    []
+  );
+
+  const neutralColor = useMemo(
+    () => new THREE.Color("#FFF2D6"),
+    []
+  );
+
+  const coolColor = useMemo(
+    () => new THREE.Color("#DCE9FF"),
+    []
+  );
+
+  const finalWarmColor = useMemo(
+    () => new THREE.Color("#FFCA78"),
+    []
+  );
+
+  /* =======================================================
+     MATERIALS
+
+     MAIN BODY
+     Light sage / olive metallic.
+     ======================================================= */
 
   const metal = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: "#d8d8d4",
-        metalness: 0.94,
-        roughness: 0.23,
+        color: "#A8B29D",
+
+        metalness: 0.88,
+        roughness: 0.24,
+
+        clearcoat: 0.75,
+        clearcoatRoughness: 0.18,
+      }),
+    []
+  );
+
+  /* =======================================================
+     DARKER STRUCTURAL METAL
+     ======================================================= */
+
+  const darkMetal = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: "#68725F",
+
+        metalness: 0.92,
+        roughness: 0.22,
+
         clearcoat: 0.65,
         clearcoatRoughness: 0.18,
       }),
     []
   );
 
-  const darkerMetal = useMemo(
+  /* =======================================================
+     LIGHT METALLIC ACCENT
+     ======================================================= */
+
+  const lightMetal = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: "#999995",
-        metalness: 0.96,
+        color: "#C4CCB9",
+
+        metalness: 0.9,
         roughness: 0.2,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.2,
+
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.15,
       }),
     []
   );
 
-  const innerMaterial = useMemo(
+  /* =======================================================
+     LIGHT PANEL
+
+     Slightly creamy rather than aggressively orange.
+     ======================================================= */
+
+  const lightMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: "#fff0ce",
-        emissive: "#ffb74c",
-        emissiveIntensity: 1.15,
-        roughness: 0.25,
+        color: "#FFF4DE",
+
+        emissive: "#FFB34D",
+        emissiveIntensity: 0.72,
+
+        roughness: 0.28,
       }),
     []
   );
 
-  /*
-   * =========================================================
-   * FRAME LOOP
-   * =========================================================
-   */
+  /* =======================================================
+     INNER DARK FRAME
+     ======================================================= */
+
+  const innerDarkMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#34382F",
+
+        roughness: 0.34,
+        metalness: 0.35,
+      }),
+    []
+  );
+
+  /* =========================================================
+     FRAME LOOP
+     ========================================================= */
 
   useFrame((_, delta) => {
     if (!root.current) return;
 
     const p = progress.get();
 
-    /*
-     * -------------------------------------------------------
-     * MASTER LAMP ROTATION
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       CINEMATIC ROTATION
+       ===================================================== */
 
-    let rotationY = 0;
+    let targetRotation = 0;
 
-    // Scene 01 — barely rotates.
     if (p < 0.12) {
-      const t = smooth(range(p, 0, 0.12));
+      const t = smooth(
+        range(p, 0, 0.12)
+      );
 
-      rotationY = lerp(
+      targetRotation = lerp(
         t,
         -0.08,
-        0.18
+        0.16
       );
-    }
-
-    // Scene 02 — clear product reveal.
-    else if (p < 0.28) {
-      const t = smooth(range(p, 0.12, 0.28));
-
-      rotationY = lerp(
-        t,
-        0.18,
-        Math.PI * 0.45
+    } else if (p < 0.28) {
+      const t = smooth(
+        range(p, 0.12, 0.28)
       );
-    }
 
-    // Scene 03 — slower elegant movement.
-    else if (p < 0.40) {
-      const t = smooth(range(p, 0.28, 0.40));
-
-      rotationY = lerp(
+      targetRotation = lerp(
         t,
-        Math.PI * 0.45,
-        Math.PI * 0.72
+        0.16,
+        Math.PI * 0.48
       );
-    }
-
-    // Scene 04 — dramatic rotation.
-    else if (p < 0.58) {
-      const t = smooth(range(p, 0.40, 0.58));
-
-      rotationY = lerp(
-        t,
-        Math.PI * 0.72,
-        Math.PI * 2.3
+    } else if (p < 0.40) {
+      const t = smooth(
+        range(p, 0.28, 0.40)
       );
-    }
 
-    // Scene 05 — settle down.
-    else if (p < 0.73) {
-      const t = smooth(range(p, 0.58, 0.73));
-
-      rotationY = lerp(
+      targetRotation = lerp(
         t,
-        Math.PI * 2.3,
+        Math.PI * 0.48,
+        Math.PI * 0.75
+      );
+    } else if (p < 0.58) {
+      const t = smooth(
+        range(p, 0.40, 0.58)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 0.75,
+        Math.PI * 2.35
+      );
+    } else if (p < 0.73) {
+      const t = smooth(
+        range(p, 0.58, 0.73)
+      );
+
+      targetRotation = lerp(
+        t,
+        Math.PI * 2.35,
         Math.PI * 2.55
       );
-    }
+    } else if (p < 0.87) {
+      const t = smooth(
+        range(p, 0.73, 0.87)
+      );
 
-    // Scene 06 — product-detail orbit.
-    else if (p < 0.87) {
-      const t = smooth(range(p, 0.73, 0.87));
-
-      rotationY = lerp(
+      targetRotation = lerp(
         t,
         Math.PI * 2.55,
-        Math.PI * 3.15
+        Math.PI * 3.18
       );
-    }
+    } else {
+      const t = smooth(
+        range(p, 0.87, 1)
+      );
 
-    // Scene 07 — final hero rotation.
-    else {
-      const t = smooth(range(p, 0.87, 1));
-
-      rotationY = lerp(
+      targetRotation = lerp(
         t,
-        Math.PI * 3.15,
-        Math.PI * 3.75
+        Math.PI * 3.18,
+        Math.PI * 3.72
       );
     }
 
-    root.current.rotation.y = THREE.MathUtils.damp(
-      root.current.rotation.y,
-      rotationY,
-      3.2,
-      delta
-    );
+    root.current.rotation.y =
+      THREE.MathUtils.damp(
+        root.current.rotation.y,
+        targetRotation,
+        3,
+        delta
+      );
 
-    /*
-     * -------------------------------------------------------
-     * CINEMATIC CAMERA
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       CAMERA
+       ===================================================== */
 
     let targetX = 0;
-    let targetY = 0.7;
+    let targetY = 0.72;
     let targetZ = 6;
 
-    /*
-     * Scene 01
-     * Static hero reveal.
-     */
-
     if (p < 0.12) {
-      const t = smooth(range(p, 0, 0.12));
+      const t = smooth(
+        range(p, 0, 0.12)
+      );
 
-      targetX = lerp(t, 0, 0.12);
-      targetY = lerp(t, 0.7, 0.78);
-      targetZ = lerp(t, 6.2, 5.9);
-    }
+      targetX = lerp(t, 0, 0.1);
+      targetY = lerp(t, 0.72, 0.8);
+      targetZ = lerp(t, 6.4, 5.9);
+    } else if (p < 0.28) {
+      const t = smooth(
+        range(p, 0.12, 0.28)
+      );
 
-    /*
-     * Scene 02
-     * Camera begins orbiting around product.
-     */
-
-    else if (p < 0.28) {
-      const t = smooth(range(p, 0.12, 0.28));
-
-      targetX = lerp(t, 0.12, -0.65);
-      targetY = lerp(t, 0.78, 0.95);
-      targetZ = lerp(t, 5.9, 5.2);
-    }
-
-    /*
-     * Scene 03
-     * Slight pull back and upward movement.
-     */
-
-    else if (p < 0.40) {
-      const t = smooth(range(p, 0.28, 0.40));
+      targetX = lerp(t, 0.1, -0.65);
+      targetY = lerp(t, 0.8, 0.95);
+      targetZ = lerp(t, 5.9, 5.15);
+    } else if (p < 0.40) {
+      const t = smooth(
+        range(p, 0.28, 0.40)
+      );
 
       targetX = lerp(t, -0.65, 0.5);
       targetY = lerp(t, 0.95, 0.58);
-      targetZ = lerp(t, 5.2, 5.8);
-    }
+      targetZ = lerp(t, 5.15, 5.75);
+    } else if (p < 0.58) {
+      const t = smooth(
+        range(p, 0.40, 0.58)
+      );
 
-    /*
-     * Scene 04
-     * Camera gets closer and moves dramatically.
-     */
-
-    else if (p < 0.58) {
-      const t = smooth(range(p, 0.40, 0.58));
-
-      targetX = lerp(t, 0.5, -0.85);
+      targetX = lerp(t, 0.5, -0.9);
       targetY = lerp(t, 0.58, 1.15);
-      targetZ = lerp(t, 5.8, 4.6);
-    }
+      targetZ = lerp(t, 5.75, 4.55);
+    } else if (p < 0.73) {
+      const t = smooth(
+        range(p, 0.58, 0.73)
+      );
 
-    /*
-     * Scene 05
-     * Pull back — breathing room.
-     */
-
-    else if (p < 0.73) {
-      const t = smooth(range(p, 0.58, 0.73));
-
-      targetX = lerp(t, -0.85, 0.3);
+      targetX = lerp(t, -0.9, 0.3);
       targetY = lerp(t, 1.15, 0.68);
-      targetZ = lerp(t, 4.6, 6.2);
-    }
-
-    /*
-     * Scene 06
-     * Intimate product orbit.
-     */
-
-    else if (p < 0.87) {
-      const t = smooth(range(p, 0.73, 0.87));
+      targetZ = lerp(t, 4.55, 6.25);
+    } else if (p < 0.87) {
+      const t = smooth(
+        range(p, 0.73, 0.87)
+      );
 
       targetX = lerp(t, 0.3, -0.42);
       targetY = lerp(t, 0.68, 0.82);
-      targetZ = lerp(t, 6.2, 5.1);
-    }
-
-    /*
-     * Scene 07
-     * Return to centered hero shot.
-     */
-
-    else {
-      const t = smooth(range(p, 0.87, 1));
+      targetZ = lerp(t, 6.25, 5.15);
+    } else {
+      const t = smooth(
+        range(p, 0.87, 1)
+      );
 
       targetX = lerp(t, -0.42, 0);
       targetY = lerp(t, 0.82, 0.72);
-      targetZ = lerp(t, 5.1, 6.1);
+      targetZ = lerp(t, 5.15, 6.2);
     }
 
-    camera.position.x = THREE.MathUtils.damp(
-      camera.position.x,
-      targetX,
-      2.4,
-      delta
+    camera.position.x =
+      THREE.MathUtils.damp(
+        camera.position.x,
+        targetX,
+        2.4,
+        delta
+      );
+
+    camera.position.y =
+      THREE.MathUtils.damp(
+        camera.position.y,
+        targetY,
+        2.4,
+        delta
+      );
+
+    camera.position.z =
+      THREE.MathUtils.damp(
+        camera.position.z,
+        targetZ,
+        2.4,
+        delta
+      );
+
+    camera.lookAt(
+      0,
+      1.05,
+      0
     );
 
-    camera.position.y = THREE.MathUtils.damp(
-      camera.position.y,
-      targetY,
-      2.4,
-      delta
-    );
-
-    camera.position.z = THREE.MathUtils.damp(
-      camera.position.z,
-      targetZ,
-      2.4,
-      delta
-    );
-
-    camera.lookAt(0, 1.0, 0);
-
-    /*
-     * -------------------------------------------------------
-     * DECONSTRUCTION
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       DECONSTRUCTION
+       ===================================================== */
 
     const breakIn = smooth(
       range(p, 0.415, 0.50)
@@ -344,17 +391,17 @@ export default function Lamp({
     );
 
     const separation =
-      breakIn * (1 - breakOut);
+      breakIn *
+      (1 - breakOut);
 
-    /*
-     * Shells
-     */
+    /* LEFT SHELL */
 
     if (shellLeft.current) {
       shellLeft.current.position.x =
         THREE.MathUtils.damp(
           shellLeft.current.position.x,
-          -0.31 - separation * 1.35,
+          -0.31 -
+            separation * 1.35,
           5,
           delta
         );
@@ -362,7 +409,8 @@ export default function Lamp({
       shellLeft.current.position.y =
         THREE.MathUtils.damp(
           shellLeft.current.position.y,
-          1.3 + separation * 0.3,
+          1.3 +
+            separation * 0.3,
           5,
           delta
         );
@@ -384,11 +432,14 @@ export default function Lamp({
         );
     }
 
+    /* RIGHT SHELL */
+
     if (shellRight.current) {
       shellRight.current.position.x =
         THREE.MathUtils.damp(
           shellRight.current.position.x,
-          0.31 + separation * 1.35,
+          0.31 +
+            separation * 1.35,
           5,
           delta
         );
@@ -396,7 +447,8 @@ export default function Lamp({
       shellRight.current.position.y =
         THREE.MathUtils.damp(
           shellRight.current.position.y,
-          1.3 - separation * 0.3,
+          1.3 -
+            separation * 0.3,
           5,
           delta
         );
@@ -418,15 +470,14 @@ export default function Lamp({
         );
     }
 
-    /*
-     * Inner panel
-     */
+    /* INNER PANEL */
 
     if (innerPanel.current) {
       innerPanel.current.position.z =
         THREE.MathUtils.damp(
           innerPanel.current.position.z,
-          0.38 + separation * 1.5,
+          0.38 +
+            separation * 1.5,
           5,
           delta
         );
@@ -440,15 +491,14 @@ export default function Lamp({
         );
     }
 
-    /*
-     * Top cap
-     */
+    /* TOP CAP */
 
     if (topCap.current) {
       topCap.current.position.y =
         THREE.MathUtils.damp(
           topCap.current.position.y,
-          3.08 + separation * 0.72,
+          3.08 +
+            separation * 0.72,
           5,
           delta
         );
@@ -462,15 +512,14 @@ export default function Lamp({
         );
     }
 
-    /*
-     * Bottom cap
-     */
+    /* BOTTOM CAP */
 
     if (bottomCap.current) {
       bottomCap.current.position.y =
         THREE.MathUtils.damp(
           bottomCap.current.position.y,
-          -0.48 - separation * 0.72,
+          -0.48 -
+            separation * 0.72,
           5,
           delta
         );
@@ -484,15 +533,16 @@ export default function Lamp({
         );
     }
 
-    /*
-     * Base movement.
-     */
+    /* =====================================================
+       FLOATING BASE
+       ===================================================== */
 
     if (neck.current) {
       neck.current.position.y =
         THREE.MathUtils.damp(
           neck.current.position.y,
-          -0.64 - separation * 0.12,
+          -0.64 -
+            separation * 0.12,
           5,
           delta
         );
@@ -502,7 +552,8 @@ export default function Lamp({
       base.current.position.y =
         THREE.MathUtils.damp(
           base.current.position.y,
-          -0.82 - separation * 0.08,
+          -0.68 -
+            separation * 0.08,
           5,
           delta
         );
@@ -526,106 +577,112 @@ export default function Lamp({
         );
     }
 
-    /*
-     * -------------------------------------------------------
-     * LIGHT TEMPERATURE
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       LIGHT TEMPERATURE
+       ===================================================== */
 
-    let targetColor = new THREE.Color(
-      "#ffbd63"
-    );
+    const targetColor =
+      new THREE.Color();
 
-    let targetIntensity = 0.9;
+    let targetIntensity = 0.82;
 
-    /*
-     * Warm → neutral
-     */
+    if (p < 0.27) {
+      targetColor.copy(
+        warmColor
+      );
 
-    if (p >= 0.27 && p < 0.38) {
+      targetIntensity = 0.82;
+    }
+
+    if (
+      p >= 0.27 &&
+      p < 0.38
+    ) {
       const t = smooth(
         range(p, 0.27, 0.38)
       );
 
       targetColor.lerpColors(
-        new THREE.Color("#ffbd63"),
-        new THREE.Color("#fff2d6"),
+        warmColor,
+        neutralColor,
         t
       );
 
       targetIntensity = lerp(
         t,
-        0.9,
-        0.68
+        0.82,
+        0.64
       );
     }
 
-    /*
-     * Neutral → cool
-     */
-
-    if (p >= 0.38 && p < 0.45) {
+    if (
+      p >= 0.38 &&
+      p < 0.45
+    ) {
       const t = smooth(
         range(p, 0.38, 0.45)
       );
 
       targetColor.lerpColors(
-        new THREE.Color("#fff2d6"),
-        new THREE.Color("#dce9ff"),
+        neutralColor,
+        coolColor,
         t
       );
 
       targetIntensity = lerp(
         t,
-        0.68,
-        0.45
+        0.64,
+        0.4
       );
     }
 
-    /*
-     * Deconstruction
-     */
+    if (
+      p >= 0.45 &&
+      p < 0.59
+    ) {
+      targetColor.copy(
+        coolColor
+      );
 
-    if (p >= 0.45 && p < 0.59) {
-      targetColor.set("#dce9ff");
-      targetIntensity = 0.42;
+      targetIntensity = 0.4;
     }
 
-    /*
-     * Return to warmth
-     */
-
-    if (p >= 0.59 && p < 0.75) {
+    if (
+      p >= 0.59 &&
+      p < 0.75
+    ) {
       const t = smooth(
         range(p, 0.59, 0.75)
       );
 
       targetColor.lerpColors(
-        new THREE.Color("#dce9ff"),
-        new THREE.Color("#ffbd63"),
+        coolColor,
+        warmColor,
         t
       );
 
       targetIntensity = lerp(
         t,
-        0.42,
-        0.9
+        0.4,
+        0.82
       );
     }
 
-    /*
-     * Finale
-     */
-
     if (p >= 0.75) {
-      targetColor.set("#ffca78");
-      targetIntensity = 0.92;
+      targetColor.copy(
+        finalWarmColor
+      );
+
+      targetIntensity = 0.84;
     }
 
     if (glowLight.current) {
       glowLight.current.color.lerp(
         targetColor,
-        1 - Math.exp(-4 * delta)
+        1 -
+          Math.exp(
+            -4 * delta
+          )
       );
 
       glowLight.current.intensity =
@@ -637,42 +694,57 @@ export default function Lamp({
         );
     }
 
-    /*
-     * -------------------------------------------------------
-     * SUBTLE FLOAT
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       FLOAT
+       ===================================================== */
+
+    const time =
+      performance.now();
 
     const float =
       Math.sin(
-        performance.now() * 0.00055
-      ) * 0.012;
+        time * 0.00055
+      ) * 0.018;
+
+    const secondaryFloat =
+      Math.sin(
+        time * 0.00031
+      ) * 0.006;
 
     root.current.position.y =
       THREE.MathUtils.damp(
         root.current.position.y,
-        -0.55 + float,
+        -0.25 +
+          float +
+          secondaryFloat,
         3,
         delta
       );
 
-    /*
-     * -------------------------------------------------------
-     * SCENE-SPECIFIC TILT
-     * -------------------------------------------------------
-     */
+    /* =====================================================
+       CINEMATIC TILT
+       ===================================================== */
 
     let targetTilt = 0;
 
-    if (p > 0.14 && p < 0.28) {
+    if (
+      p > 0.14 &&
+      p < 0.28
+    ) {
       targetTilt = 0.025;
     }
 
-    if (p > 0.415 && p < 0.585) {
+    if (
+      p > 0.415 &&
+      p < 0.585
+    ) {
       targetTilt = -0.055;
     }
 
-    if (p > 0.73 && p < 0.87) {
+    if (
+      p > 0.73 &&
+      p < 0.87
+    ) {
       targetTilt = 0.018;
     }
 
@@ -685,160 +757,268 @@ export default function Lamp({
       );
   });
 
+  /* =========================================================
+     MODEL
+     ========================================================= */
+
   return (
     <group
       ref={root}
-      position={[0, -0.55, 0]}
+      position={[
+        0,
+        -0.55,
+        0,
+      ]}
+      scale={0.68}
     >
-      {/* =====================================================
-          MAIN BODY
-      ===================================================== */}
+      {/* ===================================================
+          LEFT SHELL
+          =================================================== */}
 
       <mesh
         ref={shellLeft}
-        position={[-0.31, 1.3, 0]}
+        position={[
+          -0.31,
+          1.3,
+          0,
+        ]}
         material={metal}
         castShadow
         receiveShadow
       >
         <boxGeometry
-          args={[0.62, 3.5, 0.72]}
+          args={[
+            0.62,
+            3.5,
+            0.72,
+          ]}
         />
       </mesh>
+
+      {/* ===================================================
+          RIGHT SHELL
+          =================================================== */}
 
       <mesh
         ref={shellRight}
-        position={[0.31, 1.3, 0]}
+        position={[
+          0.31,
+          1.3,
+          0,
+        ]}
         material={metal}
         castShadow
         receiveShadow
       >
         <boxGeometry
-          args={[0.62, 3.5, 0.72]}
+          args={[
+            0.62,
+            3.5,
+            0.72,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
-          INNER LIGHT PANEL
-      ===================================================== */}
+      {/* ===================================================
+          DARK INNER FRAME
+          =================================================== */}
+
+      <mesh
+        position={[
+          0,
+          1.3,
+          0.355,
+        ]}
+        material={
+          innerDarkMaterial
+        }
+      >
+        <boxGeometry
+          args={[
+            0.84,
+            2.98,
+            0.025,
+          ]}
+        />
+      </mesh>
+
+      {/* ===================================================
+          LIGHT PANEL
+          =================================================== */}
 
       <mesh
         ref={innerPanel}
-        position={[0, 1.3, 0.38]}
-        material={innerMaterial}
+        position={[
+          0,
+          1.3,
+          0.38,
+        ]}
+        material={
+          lightMaterial
+        }
       >
         <boxGeometry
-          args={[0.78, 2.9, 0.035]}
+          args={[
+            0.78,
+            2.9,
+            0.035,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
-          RECESSED FRAME
-      ===================================================== */}
-
-      <mesh
-        position={[0, 1.3, 0.355]}
-        material={darkerMetal}
-      >
-        <boxGeometry
-          args={[0.84, 2.98, 0.025]}
-        />
-      </mesh>
-
-      {/* =====================================================
-          TOP
-      ===================================================== */}
+      {/* ===================================================
+          TOP CAP
+          =================================================== */}
 
       <mesh
         ref={topCap}
-        position={[0, 3.08, 0]}
+        position={[
+          0,
+          3.08,
+          0,
+        ]}
         material={metal}
         castShadow
       >
         <boxGeometry
-          args={[1.32, 0.14, 0.78]}
+          args={[
+            1.32,
+            0.14,
+            0.78,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
-          BOTTOM
-      ===================================================== */}
+      {/* ===================================================
+          BOTTOM CAP
+          =================================================== */}
 
       <mesh
         ref={bottomCap}
-        position={[0, -0.48, 0]}
+        position={[
+          0,
+          -0.48,
+          0,
+        ]}
         material={metal}
         castShadow
       >
         <boxGeometry
-          args={[1.32, 0.14, 0.78]}
+          args={[
+            1.32,
+            0.14,
+            0.78,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
+      {/* ===================================================
           NECK
-      ===================================================== */}
+          =================================================== */}
 
       <mesh
         ref={neck}
-        position={[0, -0.64, 0]}
-        material={darkerMetal}
+        position={[
+          0,
+          -0.64,
+          0,
+        ]}
+        material={
+          lightMetal
+        }
         castShadow
       >
         <cylinderGeometry
-          args={[0.2, 0.2, 0.25, 64]}
+          args={[
+            0.2,
+            0.2,
+            0.25,
+            64,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
-          MAIN BASE
-      ===================================================== */}
+      {/* ===================================================
+          BASE
+          =================================================== */}
 
       <mesh
         ref={base}
-        position={[0, -0.82, 0]}
-        material={darkerMetal}
+        position={[
+          0,
+          -0.68,
+          0,
+        ]}
+        material={
+          darkMetal
+        }
         castShadow
         receiveShadow
       >
         <cylinderGeometry
-          args={[0.92, 1.04, 0.18, 96]}
+          args={[
+            0.5,
+            0.56,
+            0.055,
+            96,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
+      {/* ===================================================
           BASE RING
-      ===================================================== */}
+          =================================================== */}
 
       <mesh
         ref={baseRing}
-        position={[0, -0.93, 0]}
+        position={[
+          0,
+          -0.74,
+          0,
+        ]}
         material={metal}
       >
         <cylinderGeometry
-          args={[0.71, 0.78, 0.055, 96]}
+          args={[
+            0.4,
+            0.45,
+            0.025,
+            96,
+          ]}
         />
       </mesh>
 
-      {/* =====================================================
-          INTERNAL LIGHT
-      ===================================================== */}
+      {/* ===================================================
+          PRIMARY GLOW
+          =================================================== */}
 
       <pointLight
         ref={glowLight}
-        position={[0, 1.25, 0.82]}
-        intensity={0.9}
+        position={[
+          0,
+          1.25,
+          0.82,
+        ]}
+        intensity={0.82}
         distance={3.7}
         decay={2}
-        color="#ffbd63"
+        color="#FFBD63"
       />
 
+      {/* ===================================================
+          SECONDARY FILL
+          =================================================== */}
+
       <pointLight
-        position={[0, 1.25, -0.25]}
-        intensity={0.16}
+        position={[
+          0,
+          1.25,
+          -0.25,
+        ]}
+        intensity={0.12}
         distance={2.4}
         decay={2}
-        color="#fff0d0"
+        color="#FFF0D0"
       />
     </group>
   );
